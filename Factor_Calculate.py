@@ -118,6 +118,9 @@ class Factor:
             else:
                 df = pd.merge(books,trades,on=['stock_id', 'time_id'], how='left')
         return df
+    
+    print(1)
+    
         # if book:
         #     with timer('book'):
     # def make_feature(self,func_call,stock_id,book):
