@@ -39,6 +39,7 @@ class Factor:
         self.trade_dst = {}
         self.trade = None
         self.book = None
+        self.data = None
     def load_data(self,stock_id,book):
         # for i in stock_ids:
         #     file_path = 
@@ -119,6 +120,7 @@ class Factor:
                 df = pd.merge(df,trades,on=['stock_id', 'time_id'], how='left')
             else:
                 df = pd.merge(books,trades,on=['stock_id', 'time_id'], how='left')
+        self.data = df
         return df
     def make_model(self,func,X_train,y_train,X_test,y_test):
         y_pred = func(X_train,y_train,X_test,y_test)
