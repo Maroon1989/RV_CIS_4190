@@ -8,6 +8,8 @@ from contextlib import contextmanager
 import time
 import logging
 from tqdm import tqdm
+from sklearn.model_selection import train_test_split
+from Model import STRATEGIES,DEEP
 @contextmanager
 def timer(name:str):
     s = time.time()
@@ -118,8 +120,28 @@ class Factor:
             else:
                 df = pd.merge(books,trades,on=['stock_id', 'time_id'], how='left')
         return df
+    def make_model(self,func,X_train,y_train,X_test,y_test):
+        y_pred = func(X_train,y_train,X_test,y_test)
+        return y_pred
+    def essemble_model(self):
+        # X_train,y
+        X = self.data.iloc[:,:-1]
+        y = self.data.iloc[:,-1]
+        X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2)
+        # y_test, y_pred  = value(X,y)
+        with timer('Machine Learning Models'):
+            y_pred = Parallel(n_jobs=-1,verbose=2)(delayed(self.make_model)(value,X_train,X_test,y_train,y_test) for key,value in STRATEGIES.items())
+            y_preds = pd.concat(y_pred,axis=1)
+        with timer('Deep Learning Models'):
+            # y_pred = Parallel(n_jobs=-1,verbose=2)(delayed(self.make_model)(value) for key,value in DEEP.items())
+            # y_preds = pd.concat(y_pred,axis=1)
+            for key, value in DEEP.items():
+                y_pred = self.make_model(value,X_train,X_test,y_train,y_test)
+                y_preds = pd.concat([y_preds,y_pred])
+        predictions = y_preds*self.weights
+        return predictions
     
-    print(1)
+    # print(1)
     
         # if book:
         #     with timer('book'):
