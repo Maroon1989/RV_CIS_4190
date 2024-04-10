@@ -10,8 +10,8 @@ def build_lasso(X_train,y_train,X_test,y_test):
     scaler = StandardScaler()
     X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
-    # model.fit(X_train,y_train)  
-    model.fit(X_train,y_train)                                                                                                                                                                                                                                                                                                                                                                                                  
+    # model.fit(X_train,y_train)                          # cross validation     
+    model.fit(X_train,y_train)                            # output test_pred      tune para                                                                                                                                                                                                                                                                                                                                          
     y_pred = model.predict(X_test)
     y_pred = pd.DataFrame({'Lasso_pred':y_pred})
     return y_pred
