@@ -1,3 +1,6 @@
+import sys
+sys.path.append('Model')
+sys.path.append('Factor')
 import numpy as np
 import pandas as pd
 import os
@@ -10,6 +13,7 @@ import logging
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from Model import STRATEGIES,DEEP
+from Factor import FACTORS
 @contextmanager
 def timer(name:str):
     s = time.time()
@@ -40,6 +44,8 @@ class Factor:
         self.trade = None
         self.book = None
         self.data = None
+        self.factor_dict = FACTORS
+
     def load_data(self,stock_id,book):
         # for i in stock_ids:
         #     file_path = 
@@ -49,7 +55,21 @@ class Factor:
         file = os.listdir(dir_path)[0]
         file_path = os.path.join(dir_path,file)
         data = pd.read_parquet(file_path)
+        data['stock_id'] = stock_id
         return data
+    
+    def load_all_data(self,book):
+        if book:
+            with timer('load_book_data'):
+                book = Parallel(n_jobs=-1)(delayed(self.load_data)(stock_id,True) for stock_id in self.stock_ids)
+                self.book = pd.concat(book)
+                self.book = self.book.reset_index(drop=True)
+        else:
+            with timer('load_trade_data'):
+                trade = Parallel(n_jobs=-1)(delayed(self.load_data)(stock_id,False) for stock_id in self.stock_ids)
+                self.trade = pd.concat(trade)
+                self.trade = self.trade.reset_index(drop=True)
+
     def book_feature(self,func_call,stock_id):
         # func_call = {'name':[func,[np.mean,np.sum,etc.]]}
         data = self.load_data(stock_id,True)
@@ -58,10 +78,26 @@ class Factor:
         func_list = func_call[name][1]
         df = func_call[name][0](data)
         df['stock_id'] = stock_id
+        if func_list == None:
+            func_list = [np.mean]
         self.book_dst[name] = func_list
         # print(df)
         # logging.INFO(df)
         return df
+    
+    def book_feature2(self,func_call,stock_id):
+        data = self.book[self.book['stock_id']==stock_id]
+        name = list(func_call.keys())[0]
+        func_list = func_call[name][1]
+        df = func_call[name][0](data)
+        df['stock_id'] = stock_id
+        if func_list == None:
+            func_list = [np.mean]
+        self.book_dst[name] = func_list
+        # print(df)
+        # logging.INFO(df)
+        return df
+    
     def trade_feature(self,func_call,stock_id):
         # func_call = {'name':[func,[np.mean,np.sum,etc.]]}
         data = self.load_data(stock_id,False).copy()
@@ -69,19 +105,50 @@ class Factor:
         func_list = func_call[name][1]
         df = func_call[name][0](data)
         df['stock_id'] = stock_id
+        if func_list == None:
+            func_list = [np.mean]
         self.trade_dst[name] = func_list
         # print(df)
         return df
+    
+    def trade_feature2(self,func_call,stock_id):
+        data = self.trade[self.trade['stock_id']==stock_id]
+        name = list(func_call.keys())[0]
+        func_list = func_call[name][1]
+        df = func_call[name][0](data)
+        df['stock_id'] = stock_id
+        if func_list == None:
+            func_list = [np.mean]
+        self.trade_dst[name] = func_list
+        # print(df)
+        return df
+    
     def make_trade_feature(self,func_call):
         with timer('trade'):
             trades = Parallel(n_jobs=-1)(delayed(self.trade_feature)(func_call,stock_id) for stock_id in self.stock_ids)
             self.trade = pd.concat(trades)
         return self.trade
+    
     def make_book_feature(self,func_call):
         with timer('books'):
             books = Parallel(n_jobs=-1)(delayed(self.book_feature)(func_call,stock_id) for stock_id in self.stock_ids)
             self.book = pd.concat(books)
         return self.book
+    
+    def assemble_book_feature(self,book):
+        if book:
+            for key,value in tqdm(self.factor_dict.items()):
+                func_call = {key:value}
+                books = Parallel(n_jobs=-1)(delayed(self.book_feature2)(func_call,stock_id) for stock_id in self.stock_ids)
+                self.book = pd.concat(books)
+                self.book = self.book.reset_index(drop=True)
+        else:
+            for key,value in tqdm(self.factor_dict.items()):
+                func_call = {key:value}
+                books = Parallel(n_jobs=-1)(delayed(self.trade_feature2)(func_call,stock_id) for stock_id in self.stock_ids)
+                self.trade = pd.concat(books)
+                self.trade = self.book.reset_index(drop=True)
+            
     def make_features(self,book,stock_id):
         dst = self.book_dst if book else self.trade_dst
         # data = self.load_data(stock_id,book).copy()
@@ -110,10 +177,13 @@ class Factor:
             books = pd.concat(book)
             print('books assemble successfully!')
             print(book)
-        with timer('trade'):
-            trade = Parallel(n_jobs=10,verbose=2)(delayed(self.make_features)(False,stock_id) for stock_id in self.stock_ids)
-            trades = pd.concat(trade)
-            print('trades assemble successfully!')
+        try:
+            with timer('trade'):
+                trade = Parallel(n_jobs=10,verbose=2)(delayed(self.make_features)(False,stock_id) for stock_id in self.stock_ids)
+                trades = pd.concat(trade)
+                print('trades assemble successfully!')
+        except:
+            trades = pd.DataFrame(columns=['stock_id','time_id'])
         with timer('assemble all'):
             if MEMORY_MODE:
                 df = pd.merge(base,books,on=['stock_id', 'time_id'], how='left')
