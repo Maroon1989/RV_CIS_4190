@@ -109,7 +109,7 @@ class SimpleNN(nn.Module):
         out = self.fc2(out)
         return out
 
-def nn_train_and_evaluate(X_train, y_train, X_test, y_test, epochs=5, learning_rate=0.01):
+def build_nn(X_train, y_train, X_test, y_test, epochs=5, learning_rate=0.01):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # 转换数据类型
@@ -139,13 +139,15 @@ def nn_train_and_evaluate(X_train, y_train, X_test, y_test, epochs=5, learning_r
         print(f'Epoch [{epoch+1}/{epochs}], Loss: {loss.item():.4f}')
 
     # 评估模型
+    y_pred = []
     model.eval()
     with torch.no_grad():
         outputs = model(X_test)
         test_loss = criterion(outputs, y_test.view(-1, 1))
-        predicted = outputs.view(-1).cpu().numpy()
-
-    return predicted, test_loss.item()
+        y_pred = outputs.view(-1).cpu().numpy()
+        # y_pred.extend(predicted)
+    y_pred = pd.DataFrame({'NN_pred':y_pred})
+    return y_pred
 
 # 使用示例：
 # y_pred, test_loss = nn_train_and_evaluate(X_train, y_train, X_test, y_test)
