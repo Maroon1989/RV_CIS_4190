@@ -9,36 +9,111 @@ import xgboost as xgb
 import torch.optim as optim
 from  torch.utils.data import DataLoader,TensorDataset,Dataset
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+from sklearn.model_selection import cross_val_score
+from sklearn.metrics import mean_squared_error
 def build_lasso(X_train,y_train,X_test,y_test):
     # split dataset
     # X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2)
-    model = Lasso(alpha=0.01)
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-    # model.fit(X_train,y_train)                          # cross validation     
-    model.fit(X_train,y_train)                            # output test_pred      tune para                                                                                                                                                                                                                                                                                                                                          
-    y_pred = model.predict(X_test)
-    # y_pred = pd.DataFrame({'Lasso_pred':y_pred})
-    return y_pred
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    
+    # Initialize lists to store cross-validation scores and predictions
+    cv_scores = []
+    test_preds = []
+    alphas=[0.01,0.05,0.1,0.5,1]
+    losses = []
+    for alpha in alphas:
+        model = Lasso(alpha=alpha)
+        # Perform cross-validation
+        cv_score = np.mean(cross_val_score(model, X_train_scaled, y_train, cv=5, scoring='neg_mean_squared_error'))
+        cv_scores.append(cv_score)
+        
+        # Fit model on the entire training set and make predictions on test set
+        model.fit(X_train_scaled, y_train)
+        y_pred = model.predict(X_test_scaled)
+        losses.append(mean_squared_error(y_pred=y_pred,y_true=y_test))
+        test_preds.append(y_pred)
+        
+        # Plot loss curve
+    plt.figure(figsize=(10, 6))
+    plt.plot(alphas, losses, marker='o', linestyle='-')
+    plt.xlabel('Alpha')
+    plt.ylabel('MSE')
+    plt.title('Lasso Regression Loss Curve')
+    plt.grid(True)
+    plt.show()
+    
+    # Return predictions for the best alpha value
+    best_alpha_index = np.argmax(cv_scores)
+    best_alpha = alphas[best_alpha_index]
+    best_pred = test_preds[best_alpha_index]
+    print('Lasso Best Alpha:',best_alpha)
+    return best_pred
 
 def build_Ridge(X_train,y_train,X_test,y_test):
     # split dataset
     # X_train,X_test,y_train,y_test = train_test_split(X,y,test_size=0.2)
-    model = Ridge(alpha=0.01)
     scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-    # model.fit(X_train,y_train)                          # cross validation     
-    model.fit(X_train,y_train)                            # output test_pred      tune para                                                                                                                                                                                                                                                                                                                                          
-    y_pred = model.predict(X_test)
-    # y_pred = pd.DataFrame({'Lasso_pred':y_pred})
-    return y_pred
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    
+    # Initialize lists to store cross-validation scores and predictions
+    cv_scores = []
+    test_preds = []
+    alphas=[0.01,0.05,0.1,0.5,1]
+    losses = []
+    for alpha in alphas:
+        model = Ridge(alpha=alpha)
+        # Perform cross-validation
+        cv_score = np.mean(cross_val_score(model, X_train_scaled, y_train, cv=5, scoring='neg_mean_squared_error'))
+        cv_scores.append(cv_score)
+        
+        # Fit model on the entire training set and make predictions on test set
+        model.fit(X_train_scaled, y_train)
+        y_pred = model.predict(X_test_scaled)
+        # y_pred = model.predict(X_test_scaled)
+        losses.append(mean_squared_error(y_pred=y_pred,y_true=y_test))
+        test_preds.append(y_pred)
+        
+        # Plot loss curve
+    plt.figure(figsize=(10, 6))
+    plt.plot(alphas, losses, marker='o', linestyle='-')
+    plt.xlabel('Alpha')
+    plt.ylabel('MSE')
+    plt.title('Ridge Regression Loss Curve')
+    plt.grid(True)
+    plt.show()
+    
+    # Return predictions for the best alpha value
+    best_alpha_index = np.argmax(cv_scores)
+    best_alpha = alphas[best_alpha_index]
+    best_pred = test_preds[best_alpha_index]
+    print('Ridge Best Alpha:',best_alpha)
+    return best_pred
 
 def build_xgboost(X_train,y_train,X_test,y_test):
-    model = model = xgb.XGBRegressor(n_estimators=1000,max_depth=10)
-    model.fit(X_train,y_train)
-    y_pred = model.predict(X_test)
+    n_estimators_list = [100,300,500,700,900,1000]
+    max_depth_list = [2, 4, 6, 8, 10]
+    plt.figure(figsize=(10, 6))
+    fig,ax = plt.subplots()
+    for d in tqdm(max_depth_list):
+        losses = []
+        for n in tqdm(n_estimators_list):
+            model = xgb.XGBRegressor(n_estimators=n,max_depth=d)
+            model.fit(X_train,y_train)
+            y_pred = model.predict(X_test)
+            losses.append(mean_squared_error(y_pred=y_pred,y_true=y_test))
+        # plt.plot(n_estimators_list,losses,marker='o', linestyle='-')
+        # plt.legend(f'{d}')
+        ax.plot(n_estimators_list,losses,marker='o', linestyle='-',label=f'{d}')
+    ax.set_xlabel('max_depth')
+    ax.set_ylabel('MSE')
+    ax.set_title('XGboost Regression Loss Curve')
+    ax.legend()
+    ax.grid(True)
+    plt.show()
     # y_pred = pd.DataFrame({'Xgboost_pred':y_pred})
     return y_pred
 
@@ -111,7 +186,7 @@ def build_CNN(x_train, y_train, x_test, y_test):
     model = model.to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
-
+    losses = []
     for epoch in tqdm(range(10)):
         model.train()
         running_loss = 0.0
@@ -129,6 +204,8 @@ def build_CNN(x_train, y_train, x_test, y_test):
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+        if epoch != 0:
+            losses.append(running_loss/len(train_loader))
         print(f"Epoch {epoch+1}, Loss: {running_loss/len(train_loader)}")
 
     # Evaluate the model
@@ -150,6 +227,13 @@ def build_CNN(x_train, y_train, x_test, y_test):
             y_pred.extend(outputs.view(-1).cpu().numpy())
         print(f"Test Loss: {test_loss/len(test_loader)}")   
     # y_pred = pd.DataFrame({'CNN_pred':y_pred})
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, 10), losses, marker='o', linestyle='-')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('CNN Training Loss Curve')
+    plt.grid(True)
+    plt.show()
     return y_pred
 
 import torch
@@ -173,7 +257,7 @@ class SimpleNN(nn.Module):
         out = self.fc3(out)
         return out
 
-def build_nn(X_train, y_train, X_test, y_test, epochs=5, learning_rate=0.01):
+def build_nn(X_train, y_train, X_test, y_test, epochs=10, learning_rate=0.01):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     # 转换数据类型
@@ -192,7 +276,7 @@ def build_nn(X_train, y_train, X_test, y_test, epochs=5, learning_rate=0.01):
 
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-
+    losses = []
     model.train()
     for epoch in tqdm(range(epochs)):
         model.train()
@@ -211,6 +295,8 @@ def build_nn(X_train, y_train, X_test, y_test, epochs=5, learning_rate=0.01):
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+        if epoch != 0:
+            losses.append(running_loss/len(train_loader))
         print(f"Epoch {epoch+1}, Loss: {running_loss/len(train_loader)}")
 
     y_pred = []
@@ -232,6 +318,13 @@ def build_nn(X_train, y_train, X_test, y_test, epochs=5, learning_rate=0.01):
         print(f"Test Loss: {test_loss/len(test_loader)}") 
         # y_pred.extend(predicted)
     # y_pred = pd.DataFrame({'NN_pred':y_pred})
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, 10), losses, marker='o', linestyle='-')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('NN Training Loss Curve')
+    plt.grid(True)
+    plt.show()
     return y_pred
 
 # 使用示例：
